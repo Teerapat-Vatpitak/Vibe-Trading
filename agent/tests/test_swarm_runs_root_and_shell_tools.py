@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from pathlib import Path
 
 from src.swarm.models import SwarmAgentSpec, SwarmRun, SwarmTask, WorkerResult
 from src.swarm.store import SwarmStore, swarm_runs_root
