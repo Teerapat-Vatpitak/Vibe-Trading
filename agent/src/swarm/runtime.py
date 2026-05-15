@@ -269,7 +269,7 @@ class SwarmRuntime:
                     run.total_input_tokens += result.input_tokens
                     run.total_output_tokens += result.output_tokens
 
-                    if result.status in ("completed", "timeout", "token_limit"):
+                    if result.status == "completed":
                         task_summaries[tid] = result.summary
                         now_iso = datetime.now(timezone.utc).isoformat()
                         task_store.update_status(
@@ -292,7 +292,7 @@ class SwarmRuntime:
                         all_succeeded = False
                         task_store.update_status(
                             tid, TaskStatus.failed,
-                            error=result.error or "Unknown error",
+                            error=result.error or f"worker did not complete (status={result.status})",
                             completed_at=datetime.now(timezone.utc).isoformat(),
                             worker_iterations=result.iterations,
                         )
