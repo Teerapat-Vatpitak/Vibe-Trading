@@ -438,7 +438,13 @@ def get_market_data(
     for src, src_codes in groups.items():
         loader_cls = _get_loader(src)
         loader = loader_cls()
-        data_map = loader.fetch(src_codes, start_date, end_date, interval=interval)
+        try:
+            data_map = loader.fetch(src_codes, start_date, end_date, interval=interval)
+        except Exception:
+            # A loader blow-up for one group must not lose already-resolved
+            # symbols or surface as an opaque MCP error; those codes fall
+            # through to _unresolved below (P05).
+            data_map = {}
         for symbol, df in data_map.items():
             records = df.reset_index().to_dict(orient="records")
             for r in records:
@@ -448,6 +454,15 @@ def get_market_data(
                     elif hasattr(v, "item"):
                         r[k] = v.item()
             results[symbol] = records
+
+    # P05: a typo / wrong-suffix / delisted / no-data symbol used to vanish
+    # silently (the dict only held winners), indistinguishable from "no data".
+    # Surface every requested code that produced nothing under a reserved key.
+    # Additive: omitted entirely when all codes resolved, so the happy-path
+    # payload is byte-identical to before.
+    unresolved = [c for c in codes if c not in results]
+    if unresolved:
+        results["_unresolved"] = unresolved
 
     return json.dumps(results, ensure_ascii=False, indent=2)
 
