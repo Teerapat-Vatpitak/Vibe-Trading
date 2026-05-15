@@ -50,7 +50,7 @@ def safe_path(p: str, workdir: Path) -> Path:
     try:
         resolved.relative_to(base)
     except ValueError as exc:
-        raise ValueError(f"Path {p!r} escapes workspace {base}") from exc
+        raise ValueError(f"Path {p!r} escapes the workspace root") from exc
     return resolved
 
 

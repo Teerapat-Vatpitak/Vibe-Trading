@@ -158,7 +158,7 @@ class SwarmStore:
         """
         rd = self.run_dir(run.id)
         if not rd.exists():
-            raise FileNotFoundError(f"Run directory not found: {rd}")
+            raise FileNotFoundError(f"Run directory not found: {rd.name}")
         self._atomic_write(rd / "run.json", run.model_dump_json(indent=2))
 
     def list_runs(self, limit: int = 50) -> list[SwarmRun]:
@@ -202,7 +202,7 @@ class SwarmStore:
         """
         rd = self.run_dir(run_id)
         if not rd.exists():
-            raise FileNotFoundError(f"Run directory not found: {rd}")
+            raise FileNotFoundError(f"Run directory not found: {rd.name}")
         events_file = rd / "events.jsonl"
         with self._write_lock:
             with events_file.open("a", encoding="utf-8") as f:
