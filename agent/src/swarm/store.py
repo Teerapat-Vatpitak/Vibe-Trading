@@ -18,6 +18,19 @@ from pathlib import Path
 from src.swarm.models import SwarmEvent, SwarmRun
 
 
+def swarm_runs_root() -> Path:
+    """Single source of truth for where swarm runs are persisted.
+
+    The swarm store (mcp_server) and the run-dir sandbox allow-list
+    (src.tools.path_utils) must agree on this path. They previously each
+    derived ``<agent_root>/.swarm/runs`` independently; a packaging layout
+    where the two anchors resolved differently silently put every worker
+    run_dir outside the allow-list (P03-A). Deriving it here once keeps
+    the store location and the allow-list from drifting again.
+    """
+    return Path(__file__).resolve().parents[2] / ".swarm" / "runs"
+
+
 class SwarmStore:
     """File-based persistence store for SwarmRun.
 

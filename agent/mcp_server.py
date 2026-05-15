@@ -336,15 +336,17 @@ def run_swarm(preset_name: str, variables: dict[str, str]) -> str:
     """
     import time
     from src.swarm.runtime import SwarmRuntime
-    from src.swarm.store import SwarmStore
+    from src.swarm.store import SwarmStore, swarm_runs_root
     from src.swarm.models import RunStatus
 
-    swarm_dir = AGENT_DIR / ".swarm" / "runs"
+    swarm_dir = swarm_runs_root()
     store = SwarmStore(base_dir=swarm_dir)
     runtime = SwarmRuntime(store=store)
 
     try:
-        run = runtime.start_run(preset_name, variables)
+        run = runtime.start_run(
+            preset_name, variables, include_shell_tools=_include_shell_tools
+        )
     except FileNotFoundError as exc:
         return json.dumps({"status": "error", "error": str(exc)}, ensure_ascii=False)
     except ValueError as exc:
@@ -457,9 +459,10 @@ def get_market_data(
 # ---------------------------------------------------------------------------
 
 def _get_swarm_store():
-    swarm_dir = AGENT_DIR / ".swarm" / "runs"
+    from src.swarm.store import SwarmStore, swarm_runs_root
+
+    swarm_dir = swarm_runs_root()
     swarm_dir.mkdir(parents=True, exist_ok=True)
-    from src.swarm.store import SwarmStore
     return SwarmStore(base_dir=swarm_dir)
 
 
