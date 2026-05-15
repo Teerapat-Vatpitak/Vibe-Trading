@@ -12,7 +12,9 @@ File-system-based persistence for SwarmRun. Directory structure:
 from __future__ import annotations
 
 import json
+import os
 import threading
+import time
 from pathlib import Path
 
 from src.swarm.models import SwarmEvent, SwarmRun
@@ -29,6 +31,42 @@ def swarm_runs_root() -> Path:
     the store location and the allow-list from drifting again.
     """
     return Path(__file__).resolve().parents[2] / ".swarm" / "runs"
+
+
+_TRANSIENT_WINERRORS = (5, 32)  # ERROR_ACCESS_DENIED, ERROR_SHARING_VIOLATION
+_REPLACE_ATTEMPTS = 6
+_REPLACE_BACKOFF = (0.025, 0.05, 0.1, 0.2, 0.4)  # seconds; len == attempts - 1
+
+
+def _is_transient_windows_error(exc: OSError) -> bool:
+    """True for the Windows access/sharing race on os.replace.
+
+    ``winerror`` is only set on Windows; ``getattr`` keeps this a hard
+    False on POSIX, so the retry path is Windows-only and POSIX behavior
+    is unchanged.
+    """
+    return getattr(exc, "winerror", None) in _TRANSIENT_WINERRORS
+
+
+def _replace_with_retry(tmp: Path, target: Path) -> None:
+    """``os.replace`` retried on the Windows concurrent-access race.
+
+    A reader holding ``target`` open (e.g. ``load_run`` on the poll path)
+    makes Windows fail the rename with WinError 5/32. POSIX ``os.replace``
+    is atomic and never raises these, so off-Windows this loop runs
+    exactly once — no behavior change. Non-transient errors re-raise
+    immediately; the last transient error re-raises after the budget.
+    """
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            os.replace(tmp, target)
+            return
+        except OSError as exc:
+            if not _is_transient_windows_error(exc):
+                raise
+            if attempt == _REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_BACKOFF[attempt])
 
 
 class SwarmStore:
@@ -94,7 +132,20 @@ class SwarmStore:
         run_file = self.run_dir(run_id) / "run.json"
         if not run_file.exists():
             return None
-        return SwarmRun.model_validate_json(run_file.read_text(encoding="utf-8"))
+        # The file may be read mid-replace by a concurrent writer; retry a
+        # transient read/parse failure before giving up (same race as
+        # _replace_with_retry, reader side).
+        last: Exception | None = None
+        for attempt in range(_REPLACE_ATTEMPTS):
+            try:
+                return SwarmRun.model_validate_json(
+                    run_file.read_text(encoding="utf-8")
+                )
+            except (OSError, ValueError) as exc:
+                last = exc
+                if attempt < len(_REPLACE_BACKOFF):
+                    time.sleep(_REPLACE_BACKOFF[attempt])
+        raise last  # type: ignore[misc]
 
     def update_run(self, run: SwarmRun) -> None:
         """Atomically update run state.
@@ -191,4 +242,4 @@ class SwarmStore:
         tmp_path = path.with_suffix(".tmp")
         with self._write_lock:
             tmp_path.write_text(content, encoding="utf-8")
-            tmp_path.replace(path)
+            _replace_with_retry(tmp_path, path)
