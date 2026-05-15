@@ -357,15 +357,15 @@ def run_swarm(preset_name: str, variables: dict[str, str]) -> str:
         if current is None:
             return json.dumps({"status": "error", "error": "Run record lost"}, ensure_ascii=False)
         if current.status in (RunStatus.completed, RunStatus.failed, RunStatus.cancelled):
-            tasks = [
-                {"id": t.id, "agent_id": t.agent_id, "status": t.status.value, "summary": t.summary}
-                for t in current.tasks
-            ]
+            from src.swarm.serialization import run_level_error, serialize_task
+
+            tasks = [serialize_task(t) for t in current.tasks]
             return json.dumps({
                 "status": current.status.value,
                 "preset": preset_name,
                 "run_id": current.id,
                 "final_report": current.final_report,
+                "error": run_level_error(current),
                 "tasks": tasks,
                 "total_input_tokens": current.total_input_tokens,
                 "total_output_tokens": current.total_output_tokens,
@@ -464,20 +464,15 @@ def _get_swarm_store():
 
 
 def _run_to_dict(run) -> dict:
+    from src.swarm.serialization import run_level_error, serialize_task
+
     return {
         "run_id": run.id,
         "status": run.status.value,
         "preset": run.preset_name,
         "created_at": run.created_at,
-        "tasks": [
-            {
-                "id": t.id,
-                "agent_id": t.agent_id,
-                "status": t.status.value,
-                "summary": t.summary,
-            }
-            for t in run.tasks
-        ],
+        "error": run_level_error(run),
+        "tasks": [serialize_task(t) for t in run.tasks],
         "final_report": run.final_report,
         "total_input_tokens": run.total_input_tokens,
         "total_output_tokens": run.total_output_tokens,
