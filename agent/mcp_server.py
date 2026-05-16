@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 import re
 import sys
@@ -416,6 +417,8 @@ def run_swarm(preset_name: str, variables: dict[str, str]) -> str:
 # Market data tool
 # ---------------------------------------------------------------------------
 
+DEFAULT_MAX_ROWS = 250
+
 _SOURCE_PATTERNS = [
     (re.compile(r"^\d{6}\.(SZ|SH|BJ)$", re.I), "tushare"),
     (re.compile(r"^[A-Z]+\.US$", re.I), "yfinance"),
@@ -439,26 +442,33 @@ def _get_loader(source: str):
     return get_loader_cls_with_fallback(source)
 
 
-def _cap_rows(records: list, max_rows: int):
+def _cap_rows(records: list, max_rows: int) -> list | dict[str, object]:
     """Bound a per-symbol row list to keep the MCP payload within budget.
 
-    max_rows<=0 disables the cap (full list, unchanged shape). Otherwise an
-    oversized symbol returns a head+tail window plus truncation metadata so
-    the agent knows it was capped and how to refine. Symbols within the cap
-    are returned unchanged (plain list) — small queries are byte-identical.
+    max_rows==0 disables the cap (full list, unchanged shape). A negative
+    max_rows is invalid and enforces the default cap (never unbounded).
+    Otherwise an oversized symbol is *evenly strided* — every step-th bar,
+    with the last bar pinned — so the returned series spans the full range
+    (no head+tail gap, no synthetic ``_gap`` sentinel). Symbols within the
+    cap are returned unchanged (plain list) — small queries are
+    byte-identical.
     """
     n = len(records)
-    if max_rows <= 0 or n <= max_rows:
+    if max_rows < 0:
+        max_rows = DEFAULT_MAX_ROWS  # negative invalid -> enforce cap, never unbounded
+    if max_rows == 0 or n <= max_rows:
         return records
-    head = max_rows // 2
-    tail = max_rows - head
+    step = math.ceil(n / max_rows)
+    sampled = records[::step]
+    if sampled[-1] is not records[-1]:
+        sampled = sampled + [records[-1]]
     return {
         "rows": n,
-        "returned": head + tail,
+        "returned": len(sampled),
         "truncated": True,
-        "policy": "head+tail",
+        "policy": f"every-{step}th-row (even stride; last bar pinned)",
         "hint": "narrow the date range, coarsen interval, or set max_rows=0 for all rows",
-        "data": records[:head] + [{"_gap": n - head - tail}] + records[-tail:],
+        "data": sampled,
     }
 
 
@@ -469,7 +479,7 @@ def get_market_data(
     end_date: str,
     source: str = "auto",
     interval: str = "1D",
-    max_rows: int = 250,
+    max_rows: int = DEFAULT_MAX_ROWS,
 ) -> str:
     """Fetch OHLCV market data for stocks, crypto, or mixed symbols.
 
@@ -488,9 +498,10 @@ def get_market_data(
         source: Data source ("auto", "yfinance", "okx", "tushare", "akshare", "ccxt").
         interval: Bar size (1m/5m/15m/30m/1H/4H/1D, default "1D").
         max_rows: Per-symbol row cap (default 250) so the response stays
-            within the MCP token budget. A symbol exceeding it returns a
-            head+tail window plus truncation metadata. Set max_rows=0 for
-            all rows (unbounded, legacy behavior).
+            within the MCP token budget. A symbol exceeding it returns an
+            even-stride downsample (every step-th bar, last bar pinned)
+            plus truncation metadata. Set max_rows=0 for all rows
+            (unbounded, legacy behavior).
     """
     results = {}
 
