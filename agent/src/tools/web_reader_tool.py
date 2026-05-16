@@ -89,7 +89,7 @@ def read_url(url: str, no_cache: bool = False) -> str:
             logger.warning("read_url upstream HTTP %s: %s", resp.status_code, resp.text[:500])
             return json.dumps({
                 "status": "error",
-                "error": f"remote reader returned HTTP {resp.status_code}",
+                "error": f"remote reader returned HTTP {resp.status_code}: {resp.text[:500]}",
             }, ensure_ascii=False)
 
         text = resp.text
@@ -118,7 +118,7 @@ def read_url(url: str, no_cache: bool = False) -> str:
     except Exception as exc:
         logger.warning("read_url request failed: %s", exc)
         return json.dumps(
-            {"status": "error", "error": "remote reader request failed"},
+            {"status": "error", "error": f"remote reader request failed: {exc}"},
             ensure_ascii=False,
         )
 

@@ -1,9 +1,9 @@
-"""Regression tests for P11 — read_url third-party (Jina) hardening.
+"""Regression tests for read_url third-party (Jina) hardening.
 
-Network is mocked; no live r.jina.ai calls. Asserts: HTTP/exception errors
-no longer leak the vendor name or response body (R2); a cached snapshot is
-surfaced via `cached: true`; `no_cache=True` sends the x-no-cache header
-while the default path is byte-identical (no extra header).
+Network is mocked; no live r.jina.ai calls. Asserts: HTTP errors surface
+the upstream status + body for debugging; a cached snapshot is surfaced
+via `cached: true`; `no_cache=True` sends the x-no-cache header while
+the default path is byte-identical (no extra header).
 """
 
 from __future__ import annotations
@@ -40,20 +40,19 @@ def captured(monkeypatch):
     return box
 
 
-def test_http_error_does_not_leak_vendor_or_body(captured):
-    captured["resp"] = _Resp(451, "ParamValidationError at r.jina.ai internal detail")
+def test_http_error_surfaces_status_and_body(captured):
+    captured["resp"] = _Resp(451, "ParamValidationError: bad input")
     out = json.loads(read_url(URL))
     assert out["status"] == "error"
-    assert out["error"] == "remote reader returned HTTP 451"
-    assert "jina" not in out["error"].lower() and "ParamValidation" not in out["error"]
+    assert "451" in out["error"]
+    assert "ParamValidationError: bad input" in out["error"]
 
 
-def test_exception_error_is_generic(captured):
-    captured["resp"] = RuntimeError("boom: connect to r.jina.ai failed (10.0.0.1)")
+def test_exception_error_surfaces_exc_text(captured):
+    captured["resp"] = RuntimeError("boom: connect failed (10.0.0.1)")
     out = json.loads(read_url(URL))
     assert out["status"] == "error"
-    assert out["error"] == "remote reader request failed"
-    assert "jina" not in out["error"].lower() and "boom" not in out["error"]
+    assert "boom: connect failed" in out["error"]
 
 
 def test_cached_snapshot_is_flagged(captured):
