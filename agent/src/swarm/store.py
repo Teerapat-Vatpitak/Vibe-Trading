@@ -18,6 +18,7 @@ import time
 from pathlib import Path
 
 from src.swarm.models import SwarmEvent, SwarmRun
+from src.tools.redaction import redact_internal_paths
 
 
 def swarm_runs_root() -> Path:
@@ -138,14 +139,13 @@ class SwarmStore:
         last: Exception | None = None
         for attempt in range(_REPLACE_ATTEMPTS):
             try:
-                return SwarmRun.model_validate_json(
-                    run_file.read_text(encoding="utf-8")
-                )
+                return SwarmRun.model_validate_json(run_file.read_text(encoding="utf-8"))
             except (OSError, ValueError) as exc:
                 last = exc
                 if attempt < len(_REPLACE_BACKOFF):
                     time.sleep(_REPLACE_BACKOFF[attempt])
-        raise last  # type: ignore[misc]
+        assert last is not None  # loop body sets `last` or returns
+        raise type(last)(redact_internal_paths(str(last))) from None
 
     def update_run(self, run: SwarmRun) -> None:
         """Atomically update run state.
@@ -180,9 +180,7 @@ class SwarmStore:
             run_file = entry / "run.json"
             if run_file.exists():
                 try:
-                    run = SwarmRun.model_validate_json(
-                        run_file.read_text(encoding="utf-8")
-                    )
+                    run = SwarmRun.model_validate_json(run_file.read_text(encoding="utf-8"))
                     runs.append(run)
                 except (json.JSONDecodeError, ValueError):
                     continue
@@ -208,9 +206,7 @@ class SwarmStore:
             with events_file.open("a", encoding="utf-8") as f:
                 f.write(event.model_dump_json() + "\n")
 
-    def read_events(
-        self, run_id: str, after_index: int = 0
-    ) -> list[SwarmEvent]:
+    def read_events(self, run_id: str, after_index: int = 0) -> list[SwarmEvent]:
         """Read the event log with optional offset for SSE incremental streaming.
 
         Args:

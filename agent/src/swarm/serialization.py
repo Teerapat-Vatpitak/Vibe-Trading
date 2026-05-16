@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.tools.redaction import redact_internal_paths
+
 
 def serialize_task(task: Any) -> dict:
     """Project a SwarmTask into its public per-task dict.
@@ -28,7 +30,7 @@ def serialize_task(task: Any) -> dict:
         "status": status,
         "summary": task.summary,
         "iterations": getattr(task, "worker_iterations", 0),
-        "error": getattr(task, "error", None),
+        "error": redact_internal_paths(getattr(task, "error", None)) or None,
     }
 
 
@@ -41,5 +43,5 @@ def run_level_error(run: Any) -> str | None:
     for task in getattr(run, "tasks", None) or []:
         err = getattr(task, "error", None)
         if err:
-            return f"{task.id}/{task.agent_id}: {err}"
+            return f"{task.id}/{task.agent_id}: {redact_internal_paths(err)}"
     return None
