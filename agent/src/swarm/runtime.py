@@ -310,7 +310,7 @@ class SwarmRuntime:
                                 "task_failed",
                                 task_id=tid,
                                 data={
-                                    "error": result.error,
+                                    "error": redact_internal_paths(result.error),
                                     "input_tokens": result.input_tokens,
                                     "output_tokens": result.output_tokens,
                                 },
@@ -322,7 +322,7 @@ class SwarmRuntime:
             all_succeeded = False
             self._emit_event(
                 run_id,
-                self._make_event("run_error", data={"error": str(exc)}),
+                self._make_event("run_error", data={"error": redact_internal_paths(str(exc))}),
             )
 
         # Finalize run
