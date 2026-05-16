@@ -63,6 +63,30 @@ def test_invalid_inputs_rejected_with_error(kw):
     assert "error" in out and out["error"]
 
 
+@pytest.mark.parametrize(
+    "kw",
+    [
+        {"spot": 100, "strike": 100, "expiry_days": 30, "volatility": float("nan"), "option_type": "call"},
+        {"spot": float("inf"), "strike": 100, "expiry_days": 30, "volatility": 0.25, "option_type": "call"},
+        {
+            "spot": 100,
+            "strike": 100,
+            "expiry_days": 30,
+            "volatility": 0.25,
+            "risk_free_rate": float("nan"),
+            "option_type": "call",
+        },
+    ],
+)
+def test_non_finite_inputs_rejected_with_error(kw):
+    """G2: NaN/Inf in any numeric input is rejected before pricing."""
+    kw.setdefault("risk_free_rate", 0.05)
+    out = _run(**kw)
+    assert out["status"] == "error"
+    assert "error" in out and out["error"]
+    assert "finite" in out["error"]
+
+
 def test_output_is_strict_json_no_nan():
     # json.loads already enforces strict JSON; assert it parses for all branches.
     for kw in (

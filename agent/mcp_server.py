@@ -27,6 +27,7 @@ Claude Desktop config:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
@@ -41,6 +42,8 @@ if str(AGENT_DIR) not in sys.path:
 from fastmcp import FastMCP
 
 mcp = FastMCP("Vibe-Trading")
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -61,6 +64,7 @@ def _get_skills_loader():
     global _skills_loader
     if _skills_loader is None:
         from src.agent.skills import SkillsLoader
+
         _skills_loader = SkillsLoader()
     return _skills_loader
 
@@ -69,6 +73,7 @@ def _get_registry():
     global _registry
     if _registry is None:
         from src.tools import build_registry
+
         _registry = build_registry(include_shell_tools=_include_shell_tools)
     return _registry
 
@@ -76,6 +81,7 @@ def _get_registry():
 # ---------------------------------------------------------------------------
 # Skill tools
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool
 def list_skills() -> str:
@@ -111,6 +117,7 @@ def load_skill(name: str) -> str:
 # Backtest tool
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool
 def backtest(run_dir: str) -> str:
     """Run a vectorized backtest using config.json and code/signal_engine.py.
@@ -133,12 +140,14 @@ def backtest(run_dir: str) -> str:
         run_dir: Path to the run directory containing config.json and code/.
     """
     from src.tools.backtest_tool import run_backtest
+
     return run_backtest(run_dir)
 
 
 # ---------------------------------------------------------------------------
 # Factor analysis tool
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool
 def factor_analysis(
@@ -165,16 +174,24 @@ def factor_analysis(
         bottom_n: Number of bottom-ranked stocks per period.
     """
     registry = _get_registry()
-    return registry.execute("factor_analysis", {
-        "codes": codes, "factor_name": factor_name,
-        "start_date": start_date, "end_date": end_date,
-        "source": source, "top_n": top_n, "bottom_n": bottom_n,
-    })
+    return registry.execute(
+        "factor_analysis",
+        {
+            "codes": codes,
+            "factor_name": factor_name,
+            "start_date": start_date,
+            "end_date": end_date,
+            "source": source,
+            "top_n": top_n,
+            "bottom_n": bottom_n,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
 # Options pricing tool
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool
 def analyze_options(
@@ -196,16 +213,23 @@ def analyze_options(
         option_type: "call" or "put".
     """
     registry = _get_registry()
-    return registry.execute("options_pricing", {
-        "spot": spot, "strike": strike, "expiry_days": expiry_days,
-        "risk_free_rate": risk_free_rate, "volatility": volatility,
-        "option_type": option_type,
-    })
+    return registry.execute(
+        "options_pricing",
+        {
+            "spot": spot,
+            "strike": strike,
+            "expiry_days": expiry_days,
+            "risk_free_rate": risk_free_rate,
+            "volatility": volatility,
+            "option_type": option_type,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
 # Pattern recognition tool
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool
 def pattern_recognition(run_dir: str) -> str:
@@ -226,6 +250,7 @@ def pattern_recognition(run_dir: str) -> str:
 # Web & document reading tools
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool
 def read_url(url: str) -> str:
     """Fetch a web page and convert it to clean Markdown text.
@@ -237,6 +262,7 @@ def read_url(url: str) -> str:
         url: Target URL to read.
     """
     from src.tools.web_reader_tool import read_url as _read_url
+
     return _read_url(url)
 
 
@@ -258,6 +284,7 @@ def read_document(file_path: str) -> str:
 # Web search tool
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool
 def web_search(query: str, max_results: int = 5) -> str:
     """Search the web via DuckDuckGo and return top results.
@@ -270,14 +297,19 @@ def web_search(query: str, max_results: int = 5) -> str:
         max_results: Maximum results to return (default 5, max 10).
     """
     registry = _get_registry()
-    return registry.execute("web_search", {
-        "query": query, "max_results": min(max_results, 10),
-    })
+    return registry.execute(
+        "web_search",
+        {
+            "query": query,
+            "max_results": min(max_results, 10),
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
 # File I/O tools (sandboxed to workspace)
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool
 def write_file(path: str, content: str) -> str:
@@ -307,6 +339,7 @@ def read_file(path: str) -> str:
 # Swarm team tool
 # ---------------------------------------------------------------------------
 
+
 @mcp.tool
 def list_swarm_presets() -> str:
     """List available swarm multi-agent team presets.
@@ -316,6 +349,7 @@ def list_swarm_presets() -> str:
     Returns preset names, descriptions, agent counts, and required variables.
     """
     from src.swarm.presets import list_presets
+
     presets = list_presets()
     return json.dumps(presets, ensure_ascii=False, indent=2)
 
@@ -361,15 +395,19 @@ def run_swarm(preset_name: str, variables: dict[str, str]) -> str:
                 {"id": t.id, "agent_id": t.agent_id, "status": t.status.value, "summary": t.summary}
                 for t in current.tasks
             ]
-            return json.dumps({
-                "status": current.status.value,
-                "preset": preset_name,
-                "run_id": current.id,
-                "final_report": current.final_report,
-                "tasks": tasks,
-                "total_input_tokens": current.total_input_tokens,
-                "total_output_tokens": current.total_output_tokens,
-            }, ensure_ascii=False, indent=2)
+            return json.dumps(
+                {
+                    "status": current.status.value,
+                    "preset": preset_name,
+                    "run_id": current.id,
+                    "final_report": current.final_report,
+                    "tasks": tasks,
+                    "total_input_tokens": current.total_input_tokens,
+                    "total_output_tokens": current.total_output_tokens,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
 
     return json.dumps({"status": "error", "error": "Swarm timed out after 30 minutes"}, ensure_ascii=False)
 
@@ -397,6 +435,7 @@ def _detect_source(code: str) -> str:
 def _get_loader(source: str):
     """Get loader class via registry with fallback support."""
     from backtest.loaders.registry import get_loader_cls_with_fallback
+
     return get_loader_cls_with_fallback(source)
 
 
@@ -472,6 +511,7 @@ def get_market_data(
             # A loader blow-up for one group must not lose already-resolved
             # symbols or surface as an opaque MCP error; those codes fall
             # through to _unresolved below (P05).
+            logger.exception("market-data loader %r failed for %s; codes fall through to _unresolved", src, src_codes)
             data_map = {}
         for symbol, df in data_map.items():
             records = df.reset_index().to_dict(orient="records")
@@ -499,10 +539,12 @@ def get_market_data(
 # Swarm status & history tools
 # ---------------------------------------------------------------------------
 
+
 def _get_swarm_store():
     swarm_dir = AGENT_DIR / ".swarm" / "runs"
     swarm_dir.mkdir(parents=True, exist_ok=True)
     from src.swarm.store import SwarmStore
+
     return SwarmStore(base_dir=swarm_dir)
 
 
@@ -575,20 +617,23 @@ def list_runs(limit: int = 20) -> str:
     runs = store.list_runs(limit=limit)
     items = []
     for run in runs:
-        items.append({
-            "run_id": run.id,
-            "preset": run.preset_name,
-            "status": run.status.value,
-            "created_at": run.created_at,
-            "total_input_tokens": run.total_input_tokens,
-            "total_output_tokens": run.total_output_tokens,
-        })
+        items.append(
+            {
+                "run_id": run.id,
+                "preset": run.preset_name,
+                "status": run.status.value,
+                "created_at": run.created_at,
+                "total_input_tokens": run.total_input_tokens,
+                "total_output_tokens": run.total_output_tokens,
+            }
+        )
     return json.dumps(items, ensure_ascii=False, indent=2)
 
 
 # ---------------------------------------------------------------------------
 # Trade journal tool
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool
 def analyze_trade_journal(
@@ -613,16 +658,20 @@ def analyze_trade_journal(
                      "symbol=600519.SH", "market=china_a").
     """
     registry = _get_registry()
-    return registry.execute("analyze_trade_journal", {
-        "file_path": file_path,
-        "analysis_type": analysis_type,
-        "filter_expr": filter_expr,
-    })
+    return registry.execute(
+        "analyze_trade_journal",
+        {
+            "file_path": file_path,
+            "analysis_type": analysis_type,
+            "filter_expr": filter_expr,
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
 # Shadow Account tools (4)
 # ---------------------------------------------------------------------------
+
 
 @mcp.tool
 def extract_shadow_strategy(
@@ -643,11 +692,14 @@ def extract_shadow_strategy(
         max_rules: Maximum rules to return (typically 3-5).
     """
     registry = _get_registry()
-    return registry.execute("extract_shadow_strategy", {
-        "journal_path": journal_path,
-        "min_support": min_support,
-        "max_rules": max_rules,
-    })
+    return registry.execute(
+        "extract_shadow_strategy",
+        {
+            "journal_path": journal_path,
+            "min_support": min_support,
+            "max_rules": max_rules,
+        },
+    )
 
 
 @mcp.tool
@@ -740,16 +792,15 @@ def scan_shadow_signals(
 # Entry point
 # ---------------------------------------------------------------------------
 
+
 def main():
     """Entry point for `vibe-trading-mcp` CLI command."""
     global _include_shell_tools, _registry
     import argparse
 
     parser = argparse.ArgumentParser(description="Vibe-Trading MCP Server")
-    parser.add_argument("--transport", choices=["stdio", "sse"], default="stdio",
-                        help="MCP transport (default: stdio)")
-    parser.add_argument("--port", type=int, default=8900,
-                        help="SSE port (only used with --transport sse)")
+    parser.add_argument("--transport", choices=["stdio", "sse"], default="stdio", help="MCP transport (default: stdio)")
+    parser.add_argument("--port", type=int, default=8900, help="SSE port (only used with --transport sse)")
     args = parser.parse_args()
     _include_shell_tools = True if args.transport == "stdio" else _env_shell_tools_enabled()
     _registry = None

@@ -12,6 +12,7 @@ payload is byte-identical to before), and a loader blow-up is contained.
 from __future__ import annotations
 
 import json
+import logging
 
 import pandas as pd
 import pytest
@@ -36,6 +37,13 @@ def _df():
 class _GoodOnlyLoader:
     def fetch(self, codes, start, end, interval="1D"):
         return {"GOOD.US": _df()} if "GOOD.US" in codes else {}
+
+
+class _PartialLoader:
+    """Returns only a subset of the requested codes."""
+
+    def fetch(self, codes, start, end, interval="1D"):
+        return {c: _df() for c in codes if c.startswith("OK")}
 
 
 class _BoomLoader:
@@ -69,3 +77,20 @@ def test_loader_exception_is_contained_not_lost(monkeypatch):
     monkeypatch.setattr(mcp_server, "_get_loader", lambda src: _BoomLoader)
     out = _call(["AAA.US", "BBB.US"])  # must not raise an opaque MCP error
     assert sorted(out.get("_unresolved", [])) == ["AAA.US", "BBB.US"]
+
+
+def test_partial_loader_only_missing_codes_unresolved(monkeypatch):
+    """G2: a loader returning only SOME requested codes -> the rest land
+    under _unresolved (not silently dropped)."""
+    monkeypatch.setattr(mcp_server, "_get_loader", lambda src: _PartialLoader)
+    out = _call(["OK1.US", "OK2.US", "MISS1.US", "MISS2.US"])
+    assert "OK1.US" in out and "OK2.US" in out
+    assert sorted(out.get("_unresolved", [])) == ["MISS1.US", "MISS2.US"]
+
+
+def test_swallowed_loader_exception_is_logged(monkeypatch, caplog):
+    """G2: the contained loader blow-up must still be logged (was silent)."""
+    monkeypatch.setattr(mcp_server, "_get_loader", lambda src: _BoomLoader)
+    with caplog.at_level(logging.ERROR, logger=mcp_server.logger.name):
+        _call(["AAA.US", "BBB.US"])
+    assert any("market-data loader" in r.message for r in caplog.records)
